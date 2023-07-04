@@ -1,0 +1,250 @@
+---
+title: "Prácticas Externas"
+author: "Abril Agustina Moyano Flores"
+date: "2023-06-27"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    collapsed: yes
+    smooth_scroll: yes
+    theme: journal
+    highlight: kate
+    df_print: paged
+    code_folding: show
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+# INTRODUCCIÓN 
+
+Este documento presenta un breve análisis de una serie de datos proporcionados el departamento de física aplicada de la Universidad de Granada. 
+Dichos datos fueron obtenidos de un estudio de crecimiento celular en dos polímeros diferentes. 
+
+# ANÁLISIS DE LOS DATOS 
+
+El proceso de análisis se encuentra dividido en distintas secciones que se mostrarán a continuación 
+
+## Introducción de los datos en RStudio
+
+El primer paso consiste en introducir los datos en RStudio utilizando para ello la función read_csv que se encuentra dentro de la librería readr
+
+```{r cargar datos}
+library(readr)
+library (DT)
+library (kableExtra)
+library(dplyr)
+Datos_pol_1_ <- read_csv("C:/Users/abril/Downloads/Datos pol (1).csv")
+
+Datos_pol_1_%>%
+  kbl()%>%
+  kable_paper("hover",
+              full_width=F)
+```
+
+## Selección de librerias
+
+A continuación cargamos la librearias necesarias
+```{r librerias}
+library(carData)
+library(car)
+library(ggplot2)
+library(sciplot)
+library(ggpubr)
+library(rstatix)
+library(emmeans)
+```
+
+## Análisis de datos inicial
+
+El siguiente paso consiste en realizar un pequeño análisis de los datos iniciales para conocerlos en profundidad. 
+
+Primero cambiamos el nombre de los datos para hacer más simple al análisis
+
+```{r nombre datos}
+Datos <- Datos_pol_1_
+
+```
+
+Pedimo que nos de los nombres de als variables
+
+```{r nombre de las variables}
+names(Datos)
+```
+
+Solicitamos la clase a la que pertenece cada variable
+
+```{r clase de las variables}
+
+class(Datos$Dia)
+class(Datos$Crecimiento)
+class(Datos$Tratamiento)
+```
+
+Solicitamos el factor de cada una de las variables
+
+```{r factor de las variables}
+factor(Datos$Dia)
+factor(Datos$Tratamiento)
+factor(Datos$Crecimiento)
+```
+
+En nuestro caso los factores son Día y Tratamiento mientras que Crecimiento es la variable independiente
+
+Analizamos la estructura de los datos
+
+```{r estructura de los datos}
+str(Datos)
+```
+
+Calculamos la media y la desviación estandar de los datos para cada combinación de Tratamiento y día 
+```{r media y desviación estandar}
+
+aggregate(.~Tratamiento*Dia, Datos, FUN=mean)
+aggregate(.~Tratamiento*Dia, Datos, FUN=sd)
+```
+
+Por último convertimos las variables Dia y Tratamiento a factores
+
+```{r conversión a factores}
+Datos$Tratamiento<-as.factor(Datos$Tratamiento)
+Datos$Dia<-as.factor(Datos$Dia)
+
+Tratamiento <- Datos$Tratamiento
+Dia<- Datos$Dia
+Crecimiento<- Datos$Crecimiento
+```
+
+
+## Representación de los datos iniciales
+
+El siguiente paso consiste en obtener una serie de representaciones de los datos iniciales 
+
+Primero se obtiene una representación de tipo Boxplot
+
+```{r boxplot}
+ggboxplot(Datos,x="Dia", y="Crecimiento", color="Tratamiento", palette="jco")
+
+```
+
+A continuación se crea un gráfico de barras con intervalos de confianza para la variable crecimiento para cada valor de Día y Tratamiento
+
+```{r gráfico de barras para Día y crecimiento}
+bargraph.CI(Dia, Crecimiento, Tratamiento, col=c("green",
+                                                            "orange","purple"), ci.fun= function(x) # eje x, eje y
+                                                              c(mean(x)-sd(x), mean(x) + sd(x)),legend=TRUE, x.leg=3)
+```
+
+También se puede crear un gráfico de barras para el crecimiento teniendo en cuenta un solo parámetro
+```{r}
+
+```
+
+```{r para parámetros independientes}
+bargraph.CI(Dia,Crecimiento, col=c("green", "orange"), ci.fun=
+              function(x)
+                c(mean(x)-sd(x), mean(x) + sd(x)),legend=TRUE, x.leg=4.2)
+bargraph.CI(Tratamiento , Crecimiento, col=c("green",
+                                                        "orange","purple"), ci.fun= function(x)
+                                                          c(mean(x)-sd(x), mean(x) + sd(x)),legend=TRUE, x.leg=4.2)
+```
+
+## Identificación de outliers
+
+El siguiente paso es la identificación de outliers 
+
+```{r identificación de outliers}
+Datos%>%
+  group_by(Dia,Tratamiento) %>%
+  identify_outliers(Crecimiento)
+```
+
+Se aprecia un valor pero no es considerado extremo por lo que no se elimina
+
+## Asunción de la normalidad
+
+A continuación se analiza la normalidad de los datos para lo que se representa un gráfico QQ y se realiza la prueba de normalidad de Shapiro-Wilk
+
+```{r QQplot}
+
+Modelo<-lm(Crecimiento~Dia*Tratamiento,data=Datos)
+ggqqplot(residuals(Modelo))
+```
+
+```{r Shapiro-Wilk}
+shapiro_test(residuals(Modelo))
+```
+
+
+Estas mismas pruebas se pueden realizar para las distintas combinaciones de datos
+
+```{r QQplot para combinación}
+Datos%>%
+  group_by(Dia,Tratamiento)%>%
+  shapiro_test(Crecimiento)
+```
+
+```{r Shapiro-Wilk para combinaciones}
+ggqqplot(Datos,"Crecimiento", ggtheme = theme_bw())+
+  facet_grid(Dia~Tratamiento)
+```
+
+## Homogeneidad de varianzas
+
+A continuación se analiza la homogeneidad de varianzas mediante un test de Levene
+
+```{r Homogeneidad de varianzas}
+Datos%>%
+  levene_test(Crecimiento~Dia*Tratamiento)
+```
+
+## ANOVA
+
+El siguiente paso es la realización del análisis de varianza
+
+```{r ANOVA}
+res.aov <- Datos %>% anova_test(Crecimiento ~ Dia * Tratamiento)
+res.aov
+```
+
+## Pruebas de comparación múltiple
+
+### Efectos principales simples
+
+Permite evaluar el efecto que tiene cada factor sobre la variable crecimiento
+
+```{r efectos principales simples}
+Modelo_1<-lm(Crecimiento~Dia*Tratamiento, data=Datos)
+
+Datos%>%
+  group_by(Tratamiento)%>%
+  anova_test(Crecimiento~Dia, error = Modelo_1)
+
+Modelo_1<-lm(Crecimiento~Dia*Tratamiento, data=Datos)
+
+Datos%>%
+  group_by(Dia)%>%
+  anova_test(Crecimiento~Tratamiento, error = Modelo_1)
+```
+
+
+### Identificación de influencias significativas
+
+Permite hacer comparaciones por pares de grupos permitiendo identificar si existen diferentes entre los posibles grupos
+
+```{r pair wise comparison}
+pwc<-Datos%>%
+  group_by(Dia)%>%
+  emmeans_test(Crecimiento~Tratamiento, p.adjust.method = "bonferroni")
+
+pwc
+```
+
+# CONCLUSIONES
+
+En este análisis se ha aplicado un ANOVA de dos vías para examinar el efecto que presenta el tratamiento aplicado y el tiempo sobre el crecimiento celular. Al examinar los supuestos no se han encontrado valores extremos, los datos se distribuyen de forma normal pero se ha observado que no hay homogeneidad de varianzas. Al aplicar el ANOVA se pudo ver que tanto el tratamiento como el tiempo presentan un efecto significativo sobre el crecimiento y que existe una interacción entre ellos. 
+
+Al analizar los efectos principales simples, se encontró un efecto significativo del tratamiento sobre el crecimiento para los dos valores de día. Por último se analizaron las comparaciones múltiples entre los distintos grupos de tratamiento organizados por días y se encontraron diferencias en el crecimiento para todos los grupos excepto para uno. 
+
